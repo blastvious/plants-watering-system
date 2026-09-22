@@ -9,7 +9,10 @@ from app.schemas.irrigation import (
     ModeCommandRequest,
     ThresholdSettingsRequest,
     TelemetryData,
-    HistoryRecord
+    HistoryRecord,
+    IrrigationSchedule,
+    CreateScheduleRequest,
+    UpdateScheduleRequest
 )
 from app.services.irrigation_service import irrigation_service
 from app.core.firebase import firebase_manager
@@ -100,6 +103,40 @@ def update_telemetry(data: TelemetryData):
 def get_history(limit: int = 30):
     """Lấy lịch sử dữ liệu cảm biến để vẽ đồ thị"""
     return irrigation_service.get_history(limit=limit)
+
+@router.get("/schedules")
+def get_schedules():
+    """Lấy danh sách các lịch tưới định kỳ"""
+    return irrigation_service.get_schedules()
+
+@router.post("/schedules")
+def create_schedule(request: CreateScheduleRequest):
+    """Tạo mới một lịch tưới định kỳ"""
+    return irrigation_service.create_schedule(request)
+
+@router.put("/schedules/{schedule_id}")
+def update_schedule(schedule_id: str, request: UpdateScheduleRequest):
+    """Cập nhật thông tin lịch tưới"""
+    updated = irrigation_service.update_schedule(schedule_id, request)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lịch tưới với ID này")
+    return updated
+
+@router.delete("/schedules/{schedule_id}")
+def delete_schedule(schedule_id: str):
+    """Xóa một lịch tưới định kỳ"""
+    success = irrigation_service.delete_schedule(schedule_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lịch tưới để xóa")
+    return {"success": True, "message": "Đã xóa lịch tưới thành công"}
+
+@router.post("/schedules/{schedule_id}/toggle")
+def toggle_schedule(schedule_id: str):
+    """Bật hoặc tắt nhanh trạng thái kích hoạt của lịch tưới"""
+    updated = irrigation_service.toggle_schedule(schedule_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lịch tưới với ID này")
+    return updated
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api"
     
     # Firebase configuration
-    FIREBASE_DATABASE_URL: str = os.getenv("FIREBASE_DATABASE_URL", "https://nt131-irrigation-default-rtdb.firebaseio.com")
+    FIREBASE_DATABASE_URL: str = os.getenv("FIREBASE_DATABASE_URL", "https://plants-watering-8cb40-default-rtdb.firebaseio.com")
     FIREBASE_CREDENTIALS_PATH: Optional[str] = os.getenv("FIREBASE_CREDENTIALS_PATH", "serviceAccountKey.json")
     USE_MOCK_FIREBASE: bool = os.getenv("USE_MOCK_FIREBASE", "false").lower() in ("true", "1", "yes")
 

@@ -11,9 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import asyncio
 from app.api.endpoints import router as api_router
 from app.core.config import settings
 from app.core.firebase import firebase_manager
+from app.services.irrigation_service import irrigation_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,10 +58,37 @@ if os.path.exists(frontend_dir):
             return FileResponse(index_file)
         return {"message": f"Welcome to {settings.PROJECT_NAME}. Visit /docs for API documentation."}
 
+scheduler_task = None
+
+async def run_scheduler_loop():
+    logger.info("Starting Irrigation Background Scheduler Loop...")
+    while True:
+        try:
+            await irrigation_service.check_and_run_schedules()
+        except asyncio.CancelledError:
+            logger.info("Irrigation Scheduler Loop cancelled.")
+            break
+        except Exception as e:
+            logger.error(f"Error in scheduler loop: {e}")
+        await asyncio.sleep(5)
+
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    global scheduler_task
     logger.info("Initializing Smart Irrigation System Backend...")
     logger.info(f"Mock Mode: {firebase_manager.mock_mode}")
+    scheduler_task = asyncio.create_task(run_scheduler_loop())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global scheduler_task
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("Smart Irrigation System Backend shutdown complete.")
 
 if __name__ == "__main__":
     import uvicorn

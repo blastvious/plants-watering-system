@@ -31,7 +31,27 @@ class FirebaseManager:
                 "water_min_safety": settings.DEFAULT_WATER_MIN_SAFETY,
                 "max_pump_duration_seconds": settings.DEFAULT_MAX_PUMP_SECONDS
             },
-            "history": []
+            "history": [],
+            "schedules": {
+                "sched_01": {
+                    "id": "sched_01",
+                    "name": "Tưới buổi sáng",
+                    "time": "06:30",
+                    "duration_seconds": 60,
+                    "days_of_week": [0, 1, 2, 3, 4, 5, 6],
+                    "enabled": True,
+                    "last_run": None
+                },
+                "sched_02": {
+                    "id": "sched_02",
+                    "name": "Tưới chiều mát",
+                    "time": "17:30",
+                    "duration_seconds": 45,
+                    "days_of_week": [0, 1, 2, 3, 4, 5, 6],
+                    "enabled": False,
+                    "last_run": None
+                }
+            }
         }
 
         self.initialize()
@@ -40,30 +60,47 @@ class FirebaseManager:
         cred_path = settings.FIREBASE_CREDENTIALS_PATH
         db_url = settings.FIREBASE_DATABASE_URL
 
+        # Auto-detect Firebase credential JSON file
+        actual_cred_path = None
+        search_dirs = [
+            os.getcwd(),
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), # backend dir
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) # root dir
+        ]
+        if cred_path and os.path.exists(cred_path):
+            actual_cred_path = cred_path
+        else:
+            for s_dir in search_dirs:
+                if os.path.isdir(s_dir):
+                    for fname in os.listdir(s_dir):
+                        if fname.endswith(".json") and ("firebase-adminsdk" in fname or fname == "serviceAccountKey.json"):
+                            actual_cred_path = os.path.join(s_dir, fname)
+                            break
+                if actual_cred_path:
+                    break
+
         # Check if credentials file exists and real mode is requested
-        if not self.mock_mode and cred_path and os.path.exists(cred_path):
+        if not self.mock_mode and actual_cred_path and os.path.exists(actual_cred_path):
             try:
                 if not firebase_admin._apps:
-                    cred = credentials.Certificate(cred_path)
+                    cred = credentials.Certificate(actual_cred_path)
                     firebase_admin.initialize_app(cred, {
                         'databaseURL': db_url
                     })
                 self.db_ref = db.reference('irrigation_system')
                 self.is_initialized = True
                 self.mock_mode = False
-                logger.info(f"Firebase Admin SDK initialized successfully with database: {db_url}")
+                logger.info(f"Firebase Admin SDK initialized successfully using key: {os.path.basename(actual_cred_path)}")
 
                 # Sync initial schema if empty
                 snapshot = self.db_ref.get()
                 if not snapshot:
+                    logger.info("Firebase empty. Uploading initial local state...")
                     self.db_ref.set(self._local_state)
                 else:
-                    # Sync local cache with remote
-                    if "telemetry" in snapshot:
-                        self._local_state["telemetry"] = snapshot["telemetry"]
-                    if "control" in snapshot:
-                        self._local_state["control"] = snapshot["control"]
-
+                    logger.info("Syncing state from Firebase Cloud...")
+                    if isinstance(snapshot, dict):
+                        self._local_state.update(snapshot)
                 # Start Firebase live listener
                 self._start_firebase_listener()
                 return
@@ -97,6 +134,15 @@ class FirebaseManager:
                             self._local_state["control"][key] = data
                         elif not key and isinstance(data, dict):
                             self._local_state["control"] = data
+                    elif path.startswith("/schedules"):
+                        key = path.replace("/schedules/", "").strip("/")
+                        if key:
+                            if data is None:
+                                self._local_state.get("schedules", {}).pop(key, None)
+                            else:
+                                self._local_state.setdefault("schedules", {})[key] = data
+                        elif isinstance(data, dict):
+                            self._local_state["schedules"] = data
 
                     self._notify_subscribers()
                 except Exception as ex:
@@ -196,6 +242,40 @@ class FirebaseManager:
         else:
             records = list(history)
         return records[-limit:]
+
+    def get_schedules(self) -> Dict[str, Dict[str, Any]]:
+        return self._local_state.get("schedules", {})
+
+    def save_schedule(self, schedule: Dict[str, Any]) -> Dict[str, Any]:
+        sched_id = schedule.get("id")
+        if not sched_id:
+            return {}
+        schedules = self._local_state.setdefault("schedules", {})
+        schedules[sched_id] = schedule
+
+        if not self.mock_mode and self.db_ref:
+            try:
+                self.db_ref.child("schedules").child(sched_id).set(schedule)
+            except Exception as e:
+                logger.error(f"Failed to save schedule to Firebase: {e}")
+
+        self._notify_subscribers()
+        return schedule
+
+    def delete_schedule(self, schedule_id: str) -> bool:
+        schedules = self._local_state.get("schedules", {})
+        if schedule_id in schedules:
+            del schedules[schedule_id]
+
+            if not self.mock_mode and self.db_ref:
+                try:
+                    self.db_ref.child("schedules").child(schedule_id).delete()
+                except Exception as e:
+                    logger.error(f"Failed to delete schedule from Firebase: {e}")
+
+            self._notify_subscribers()
+            return True
+        return False
 
 firebase_manager = FirebaseManager()
 

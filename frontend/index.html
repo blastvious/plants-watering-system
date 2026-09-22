@@ -282,6 +282,27 @@
             </div>
         </div>
 
+        <!-- Irrigation Scheduling Section -->
+        <div class="glass-card rounded-2xl p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div class="flex items-center space-x-2.5">
+                    <i class="fa-regular fa-clock text-amber-400 text-lg"></i>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Lập Lịch Tưới Định Kỳ (Scheduling)</h3>
+                        <p class="text-xs text-slate-400">Tự động kích hoạt bơm theo giờ cố định và ngày trong tuần</p>
+                    </div>
+                </div>
+                <button onclick="openScheduleModal()" class="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Thêm Lịch Tưới Mới
+                </button>
+            </div>
+
+            <!-- Schedules Grid -->
+            <div id="schedulesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="text-center py-6 text-slate-500 col-span-full">Đang tải danh sách lịch tưới...</div>
+            </div>
+        </div>
+
         <!-- Realtime Charts Section -->
         <div class="glass-card rounded-2xl p-6 space-y-4">
             <div class="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -314,6 +335,66 @@
             </div>
         </div>
     </main>
+
+    <!-- Modal Thêm / Sửa Lịch Tưới -->
+    <div id="scheduleModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm hidden transition-opacity duration-200">
+        <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h4 id="scheduleModalTitle" class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-regular fa-calendar-plus text-emerald-400"></i> Thêm Lịch Tưới Mới
+                </h4>
+                <button onclick="closeScheduleModal()" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="scheduleForm" onsubmit="handleScheduleSubmit(event)" class="space-y-4 text-xs">
+                <input type="hidden" id="schedInputId" value="">
+
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">Tên lịch tưới</label>
+                    <input id="schedInputName" type="text" required placeholder="Ví dụ: Tưới sáng sớm" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-300 mb-1">Giờ tưới (HH:MM)</label>
+                        <input id="schedInputTime" type="time" required value="07:00" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-300 mb-1">Thời lượng (giây)</label>
+                        <input id="schedInputDuration" type="number" min="5" max="600" value="60" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="font-semibold text-slate-300">Lặp lại các ngày trong tuần</label>
+                        <div class="space-x-1">
+                            <button type="button" onclick="selectQuickDays('all')" class="text-[10px] text-blue-400 hover:underline">Cả tuần</button>
+                            <span class="text-slate-600">|</span>
+                            <button type="button" onclick="selectQuickDays('workdays')" class="text-[10px] text-blue-400 hover:underline">T2-T6</button>
+                            <span class="text-slate-600">|</span>
+                            <button type="button" onclick="selectQuickDays('weekend')" class="text-[10px] text-blue-400 hover:underline">T7-CN</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1.5" id="dayButtonsContainer">
+                        <!-- Populated by app.js -->
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2 pt-1">
+                    <input id="schedInputEnabled" type="checkbox" checked class="w-4 h-4 accent-emerald-500 rounded bg-slate-800 border-slate-700 cursor-pointer">
+                    <label for="schedInputEnabled" class="text-slate-300 font-medium cursor-pointer">Kích hoạt lịch ngay sau khi lưu</label>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closeScheduleModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition">Hủy</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-500/20">Lưu Lịch Tưới</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>

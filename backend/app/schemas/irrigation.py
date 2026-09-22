@@ -40,3 +40,32 @@ class HistoryRecord(BaseModel):
     temperature: float
     pump_state: bool
 
+class IrrigationSchedule(BaseModel):
+    id: str = Field(..., description="Mã định danh duy nhất của lịch")
+    name: str = Field("Lịch tưới", description="Tên lịch tưới (ví dụ: Tưới sáng)")
+    time: str = Field(..., description="Giờ tưới theo định dạng HH:MM, ví dụ '07:00'")
+    duration_seconds: int = Field(60, description="Thời lượng tưới (giây)", ge=5, le=600)
+    days_of_week: List[int] = Field(
+        default=[0, 1, 2, 3, 4, 5, 6],
+        description="Các ngày trong tuần (0=Thứ 2, ..., 6=Chủ nhật)"
+    )
+    enabled: bool = Field(True, description="Trạng thái kích hoạt lịch")
+    last_run: Optional[float] = Field(None, description="Thời điểm chạy gần nhất (timestamp)")
+
+class CreateScheduleRequest(BaseModel):
+    name: str = Field("Lịch tưới", description="Tên lịch tưới")
+    time: str = Field(..., description="Giờ tưới theo định dạng HH:MM, ví dụ '07:00'")
+    duration_seconds: int = Field(60, description="Thời lượng tưới (giây)", ge=5, le=600)
+    days_of_week: List[int] = Field(
+        default=[0, 1, 2, 3, 4, 5, 6],
+        description="Các ngày trong tuần (0=Thứ 2, ..., 6=Chủ nhật)"
+    )
+    enabled: bool = Field(True, description="Trạng thái kích hoạt lịch")
+
+class UpdateScheduleRequest(BaseModel):
+    name: Optional[str] = None
+    time: Optional[str] = None
+    duration_seconds: Optional[int] = Field(None, ge=5, le=600)
+    days_of_week: Optional[List[int]] = None
+    enabled: Optional[bool] = None
+
