@@ -1,0 +1,6 @@
+# Bỏ qua mọi tệp .env
+.env
+*.env.*
+
+# Bỏ qua mọi tệp .json
+*.json
