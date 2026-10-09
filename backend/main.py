@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import asyncio
+from app.api import endpoints as endpoints_module
 from app.api.endpoints import router as api_router
 from app.core.config import settings
 from app.core.firebase import firebase_manager
@@ -77,6 +78,7 @@ async def startup_event():
     global scheduler_task
     logger.info("Initializing Smart Irrigation System Backend...")
     logger.info(f"Mock Mode: {firebase_manager.mock_mode}")
+    endpoints_module.set_main_loop(asyncio.get_running_loop())
     scheduler_task = asyncio.create_task(run_scheduler_loop())
 
 @app.on_event("shutdown")

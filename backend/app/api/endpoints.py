@@ -49,12 +49,23 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # Hook firebase update events to broadcast to all web clients
+_main_loop = None
+
+def set_main_loop(loop):
+    global _main_loop
+    _main_loop = loop
+
+# Hook firebase update events to broadcast to all web clients
 def on_state_updated(state: Dict[str, Any]):
+    if _main_loop is None:
+        logger.warning("Broadcast skipped: main event loop not captured yet.")
+        return
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            status = irrigation_service.get_system_status().model_dump()
-            asyncio.create_task(manager.broadcast({"type": "STATUS_UPDATE", "data": status}))
+        status = irrigation_service.get_system_status().model_dump()
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "STATUS_UPDATE", "data": status}),
+            _main_loop
+        )
     except Exception as e:
         logger.debug(f"Broadcast skip: {e}")
 
