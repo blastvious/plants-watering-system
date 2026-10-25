@@ -15,7 +15,7 @@
 | | Signal | **GPIO 34** | Đọc ADC mực nước |
 | **Cảm biến nhiệt độ (DHT11/22)** | VCC | 3.3V / 5V | Nguồn cảm biến |
 | | GND | GND | Nối mass chung |
-| | DATA | **GPIO 4** | Chân tín hiệu nhiệt độ |
+| | DATA | **GPIO 15** | Chân tín hiệu nhiệt độ |
 | **Module Relay** | VCC | 5V (VIN) | Nguồn cuộn hút Relay |
 | | GND | GND | Nối mass chung |
 | | IN | **GPIO 26** | Tín hiệu kích đóng/ngắt |
