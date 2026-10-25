@@ -2,110 +2,143 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
+#include "DHT.h"
 
-// ================= CẤU HÌNH WIFI & FIREBASE =================
-#define WIFI_SSID       "KEYBOX KAFE"
-#define WIFI_PASSWORD   ""
+// ================= Wifi Configuration =================
+#define WIFI_SSID       "iPhone"
+#define WIFI_PASSWORD   "23521717"
 
-#define FIREBASE_HOST   "https://plants-watering-8cb40-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH   "7l2FfHmkQmiYYJ2K8r8xoi6g1oPK7kLk3RbvACXx"
+#define DATABASE_URL    "https://plants-watering-8cb40-default-rtdb.firebaseio.com"
+#define DATABASE_SECRET "7l2FfHmkQmiYYJ2K8r8xoi6g1oPK7kLk3RbvACXx"
 
-#define LED_PIN         2  // LED onboard của ESP32
+// ================= Configuration (PINS) =================
+#define DHTPIN          15     // PIN DATA DHT11/DHT22
+#define DHTTYPE         DHT11  
+#define SOIL_PIN        34     // PIN SOIL SENSOR (ADC1)
+#define WATER_LEVEL_PIN 35     // PIN WATER SENSOR (ADC1)
+#define RELAY_PIN       26     // PIN Relay controll water pump
 
-// ================= KHAI BÁO ĐỐI TƯỢNG FIREBASECLIENT =================
+// ================= Initial - Object =================
 DefaultNetwork network;
-LegacyToken user_auth(FIREBASE_AUTH);
+LegacyToken user_auth(DATABASE_SECRET);
 FirebaseApp app;
 WiFiClientSecure ssl_client;
 using AsyncClient = AsyncClientClass;
 AsyncClient aClient(ssl_client, getNetwork(network));
 RealtimeDatabase Database;
 
-// Biến lưu trạng thái LED và bộ định thời
-bool ledStatus = false;
-unsigned long lastSendTime = 0;
+DHT dht(DHTPIN, DHTTYPE);
 
-// Prototype hàm callback xử lý dữ liệu bất đồng bộ
-void asyncResultCallback(AsyncResult &aResult);
+// ================= GLOBAL PARAMETERS =================
+unsigned long lastSendTime = 0;
+const unsigned long sendInterval = 5000; // Fetch data every 5s
+
+bool relayState = false;
+
+// Prototype callback
+void processData(AsyncResult &aResult);
 
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  delay(500);
 
-  // 1. Kết nối WiFi
-  Serial.printf("\nĐang kết nối WiFi: %s", WIFI_SSID);
+  // 1. Configuration I/O & ADC
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW); // Turn off as a default
+
+  analogReadResolution(12);
+  analogSetPinAttenuation(WATER_LEVEL_PIN, ADC_11db);
+  analogSetPinAttenuation(SOIL_PIN, ADC_11db);
+
+  // 2. DHT sensor
+  dht.begin();
+
+  // 3. Connecting Wi-Fi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
     Serial.print(".");
+    delay(300);
   }
-  Serial.println("\n[WiFi] Đã kết nối thành công!");
-  Serial.printf("[WiFi] IP ESP32: %s\n", WiFi.localIP().toString().c_str());
+  Serial.println("\nConnected with IP: ");
+  Serial.println(WiFi.localIP());
 
-  // 2. Cấu hình SSL Client
+  // 4. Firebase setup
   ssl_client.setInsecure();
-
-  // 3. Khởi tạo Firebase App & Realtime Database
-  initializeApp(aClient, app, getAuth(user_auth), asyncResultCallback, "🔐 authTask");
+  initializeApp(aClient, app, getAuth(user_auth), processData, " authTask");
   app.getApp<RealtimeDatabase>(Database);
-  Database.url(FIREBASE_HOST);
-  Serial.println("[Firebase] Đã khởi tạo kết nối!");
+  Database.url(DATABASE_URL);
 }
 
 // ================= LOOP =================
 void loop() {
-  // Duy trì tiến trình background của Firebase (bắt buộc)
   app.loop();
 
   if (app.ready()) {
-    // ----------------- 1. NHẬN DỮ LIỆU TỪ FIREBASE (ĐIỀU KHIỂN LED) -----------------
-    // Đọc liên tục giá trị bool từ đường dẫn "/test/led"
-    Database.get(aClient, "/test/led", asyncResultCallback, false, "RTDB_GetLed");
+    unsigned long currentTime = millis();
+    
+    if (currentTime - lastSendTime >= sendInterval) {
+      lastSendTime = currentTime;
 
-    // ----------------- 2. GỬI DỮ LIỆU LÊN FIREBASE (BÁO TRẠNG THÁI) -----------------
-    // Định kỳ mỗi 5 giây gửi thời gian hoạt động (uptime) lên Firebase
-    if (millis() - lastSendTime > 5000) {
-      lastSendTime = millis();
-      
-      int uptimeSeconds = millis() / 1000;
-      Database.set<int>(aClient, "/test/uptime_seconds", uptimeSeconds, asyncResultCallback, "RTDB_SetUptime");
+      // A. Read controll signal from PATH of BACKEND
+      Database.get(aClient, "/irrigation_system/control/pump_manual_command", processData, false, "RTDB_GetPumpCmd");
+
+      // B. Read data sensor
+      float h = dht.readHumidity();
+      float t = dht.readTemperature();
+      int soilRaw = analogRead(SOIL_PIN);
+      int waterRaw = analogRead(WATER_LEVEL_PIN);
+
+      // Convert soil sensor %
+      int soilPercent = map(soilRaw, 4095, 0, 0, 100);
+      soilPercent = constrain(soilPercent, 0, 100);
+
+      // C. Push data sensor (JSON)
+      String jsonPayload = "{";
+      if (!isnan(h) && !isnan(t)) {
+        jsonPayload += "\"temperature\":" + String(t, 1) + ",";
+        jsonPayload += "\"humidity\":" + String(h, 1) + ",";
+        Serial.printf("[ESP32] Temp: %.1f°C | Hum: %.1f%% | Soil: %d%% | Water: %d\n", t, h, soilPercent, waterRaw);
+      } else {
+        Serial.printf("[ESP32] (DHT Error) Soil: %d%% | Water: %d\n", soilPercent, waterRaw);
+      }
+      jsonPayload += "\"soil_moisture\":" + String(soilPercent) + ",";
+      jsonPayload += "\"water_level\":" + String(waterRaw);
+      jsonPayload += "}";
+
+      // Convert jsonPayload to object_t in order to Firebase understand this is a JSON Object
+      Database.set(aClient, "/sensor", object_t(jsonPayload), processData, "RTDB_SetSensorData");
     }
   }
-
-  delay(100);
 }
 
-// ================= HÀM CALLBACK XỬ LÝ KẾT QUẢ FIREBASE =================
-void asyncResultCallback(AsyncResult &aResult) {
+// ================= Proceed Result function =================
+void processData(AsyncResult &aResult) {
   if (!aResult.isResult())
     return;
 
-  // Xử lý báo lỗi nếu có
   if (aResult.isError()) {
-    Serial.printf("[LỖI FIREBASE] Task: %s, Code: %d, Msg: %s\n", 
-                  aResult.uid().c_str(), 
-                  aResult.error().code(), 
-                  aResult.error().message().c_str());
+    Firebase.printf("[Error] Task: %s, Msg: %s\n", aResult.uid().c_str(), aResult.error().message().c_str());
   }
 
-  // Xử lý khi có dữ liệu phản hồi từ Firebase
   if (aResult.available()) {
-    // 1. Phản hồi của lệnh ĐỌC LED (/test/led)
-    if (aResult.uid() == "RTDB_GetLed") {
-      String payload = aResult.c_str();
-      bool firebaseLedCmd = (payload == "true" || payload == "1");
+    String payload = aResult.c_str();
 
-      if (firebaseLedCmd != ledStatus) {
-        ledStatus = firebaseLedCmd;
-        digitalWrite(LED_PIN, ledStatus ? HIGH : LOW);
-        Serial.printf("[FIREBASE -> ESP32] Đã nhận lệnh: Đèn LED %s\n", ledStatus ? "BẬT" : "TẮT");
+    // Get controll signal (on/off) water pump from Backend
+    if (aResult.uid() == "RTDB_GetPumpCmd") {
+      bool newPumpCmd = (payload == "true" || payload == "1");
+      
+      if (newPumpCmd != relayState) {
+        relayState = newPumpCmd;
+        
+        //  (Active HIGH or Active LOW)
+        digitalWrite(RELAY_PIN, relayState ? HIGH : LOW); 
+        
+        Serial.printf("\n==========================================\n");
+        Serial.printf("-> [BACKEND -> ESP32] MÁY BƠM: %s\n", relayState ? "BẬT (ON) " : "TẮT (OFF) ");
+        Serial.printf("==========================================\n\n");
       }
-    }
-    // 2. Phản hồi của lệnh GỬI UPTIME (/test/uptime_seconds)
-    else if (aResult.uid() == "RTDB_SetUptime") {
-      Serial.printf("[ESP32 -> FIREBASE] Đã gửi uptime thành công: %s giây\n", aResult.c_str());
     }
   }
 }
