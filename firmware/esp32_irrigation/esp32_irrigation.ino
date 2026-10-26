@@ -8,8 +8,8 @@
 #define WIFI_SSID       "iPhone"
 #define WIFI_PASSWORD   "23521717"
 
-#define DATABASE_URL    "https://plants-watering-8cb40-default-rtdb.firebaseio.com"
-#define DATABASE_SECRET "7l2FfHmkQmiYYJ2K8r8xoi6g1oPK7kLk3RbvACXx"
+#define DATABASE_URL    "https://your_url-project-rtdb.firebaseio.com"
+#define DATABASE_SECRET "7l2FfHmkQmiYYJ2K8r8xyoursecret"
 
 // ================= Configuration (PINS) =================
 #define DHTPIN          15     // PIN DATA DHT11/DHT22
